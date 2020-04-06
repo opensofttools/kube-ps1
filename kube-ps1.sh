@@ -24,10 +24,10 @@
 # Override these values in ~/.zshrc or ~/.bashrc
 KUBE_PS1_BINARY="${KUBE_PS1_BINARY:-kubectl}"
 KUBE_PS1_SYMBOL_ENABLE="${KUBE_PS1_SYMBOL_ENABLE:-true}"
-KUBE_PS1_SYMBOL_DEFAULT=${KUBE_PS1_SYMBOL_DEFAULT:-$'\u2388 '}
+KUBE_PS1_SYMBOL_DEFAULT=${KUBE_PS1_SYMBOL_DEFAULT:-$'\u2638'}
+# KUBE_PS1_SYMBOL_DEFAULT=${KUBE_PS1_SYMBOL_DEFAULT:-☸ }
 KUBE_PS1_SYMBOL_USE_IMG="${KUBE_PS1_SYMBOL_USE_IMG:-false}"
 KUBE_PS1_NS_ENABLE="${KUBE_PS1_NS_ENABLE:-true}"
-KUBE_PS1_CONTEXT_ENABLE="${KUBE_PS1_CONTEXT_ENABLE:-true}"
 KUBE_PS1_PREFIX="${KUBE_PS1_PREFIX-(}"
 KUBE_PS1_SEPARATOR="${KUBE_PS1_SEPARATOR-|}"
 KUBE_PS1_DIVIDER="${KUBE_PS1_DIVIDER-:}"
@@ -69,7 +69,7 @@ _kube_ps1_init() {
       _KUBE_PS1_CLOSE_ESC=$'\002'
       _KUBE_PS1_DEFAULT_BG=$'\033[49m'
       _KUBE_PS1_DEFAULT_FG=$'\033[39m'
-      [[ $PROMPT_COMMAND =~ _kube_ps1_update_cache ]] || PROMPT_COMMAND="_kube_ps1_update_cache;${PROMPT_COMMAND:-:}"
+      PROMPT_COMMAND="_kube_ps1_update_cache;${PROMPT_COMMAND:-:}"
       ;;
   esac
 }
@@ -149,7 +149,7 @@ _kube_ps1_symbol() {
 
   case "${KUBE_PS1_SHELL}" in
     bash)
-      if ((BASH_VERSINFO[0] >= 4)) && [[ $'\u2388 ' != "\\u2388 " ]]; then
+      if ((BASH_VERSINFO[0] >= 4)) && [[ $'\u2638 ' != "\\u2638 " ]]; then
         KUBE_PS1_SYMBOL="${KUBE_PS1_SYMBOL_DEFAULT}"
         # KUBE_PS1_SYMBOL=$'\u2388 '
         KUBE_PS1_SYMBOL_IMG=$'\u2638 '
@@ -197,9 +197,8 @@ _kube_ps1_file_newer_than() {
 }
 
 _kube_ps1_update_cache() {
-  local return_code=$?
 
-  [[ "${KUBE_PS1_ENABLED}" == "off" ]] && return $return_code
+  [[ "${KUBE_PS1_ENABLED}" == "off" ]] && return
 
   if ! _kube_ps1_binary_check "${KUBE_PS1_BINARY}"; then
     # No ability to fetch context/namespace; display N/A.
@@ -225,38 +224,14 @@ _kube_ps1_update_cache() {
       return
     fi
   done
-
-  return $return_code
 }
 
-_kube_ps1_get_context() {
-  if [[ "${KUBE_PS1_CONTEXT_ENABLE}" == true ]]; then
-    KUBE_PS1_CONTEXT="$(${KUBE_PS1_BINARY} config current-context 2>/dev/null)"
-    # Set namespace to 'N/A' if it is not defined
-    KUBE_PS1_CONTEXT="${KUBE_PS1_CONTEXT:-N/A}"
-
-    if [[ ! -z "${KUBE_PS1_CLUSTER_FUNCTION}" ]]; then
-      KUBE_PS1_CONTEXT=$($KUBE_PS1_CLUSTER_FUNCTION $KUBE_PS1_CONTEXT)
-    fi
-  fi
-}
-
-_kube_ps1_get_ns() {
-  if [[ "${KUBE_PS1_NS_ENABLE}" == true ]]; then
-    KUBE_PS1_NAMESPACE="$(${KUBE_PS1_BINARY} config view --minify --output 'jsonpath={..namespace}' 2>/dev/null)"
-    # Set namespace to 'default' if it is not defined
-    KUBE_PS1_NAMESPACE="${KUBE_PS1_NAMESPACE:-default}"
-
-    if [[ ! -z "${KUBE_PS1_NAMESPACE_FUNCTION}" ]]; then
-        KUBE_PS1_NAMESPACE=$($KUBE_PS1_NAMESPACE_FUNCTION $KUBE_PS1_NAMESPACE)
-    fi
-  fi
-}
-
+# TODO: Break this function apart:
+#       one for context and one for namespace
 _kube_ps1_get_context_ns() {
   # Set the command time
   if [[ "${KUBE_PS1_SHELL}" == "bash" ]]; then
-    if ((BASH_VERSINFO[0] >= 4 && BASH_VERSINFO[1] >= 2)); then
+    if ((BASH_VERSINFO[0] >= 4)); then
       KUBE_PS1_LAST_TIME=$(printf '%(%s)T')
     else
       KUBE_PS1_LAST_TIME=$(date +%s)
@@ -265,38 +240,56 @@ _kube_ps1_get_context_ns() {
     KUBE_PS1_LAST_TIME=$EPOCHSECONDS
   fi
 
-  _kube_ps1_get_context
-  _kube_ps1_get_ns
+  KUBE_PS1_CONTEXT="$(${KUBE_PS1_BINARY} config current-context 2>/dev/null)"
+
+  if [[ ! -z "${KUBE_PS1_CLUSTER_FUNCTION}" ]]; then
+    KUBE_PS1_CONTEXT=$($KUBE_PS1_CLUSTER_FUNCTION $KUBE_PS1_CONTEXT)
+  fi
+
+  if [[ -z "${KUBE_PS1_CONTEXT}" ]]; then
+    KUBE_PS1_CONTEXT="N/A"
+    KUBE_PS1_NAMESPACE="N/A"
+    return
+  elif [[ "${KUBE_PS1_NS_ENABLE}" == true ]]; then
+    KUBE_PS1_NAMESPACE="$(${KUBE_PS1_BINARY} config view --minify --output 'jsonpath={..namespace}' 2>/dev/null)"
+    # Set namespace to 'default' if it is not defined
+    KUBE_PS1_NAMESPACE="${KUBE_PS1_NAMESPACE:-default}"
+
+    if [[ ! -z "${KUBE_PS1_NAMESPACE_FUNCTION}" ]]; then
+        KUBE_PS1_NAMESPACE=$($KUBE_PS1_NAMESPACE_FUNCTION $KUBE_PS1_NAMESPACE)
+    fi
+
+  fi
 }
 
 # Set kube-ps1 shell defaults
 _kube_ps1_init
 
-_kubeon_usage() {
-  cat <<"EOF"
-Toggle kube-ps1 prompt on
+# _kubeon_usage() {
+#   cat <<"EOF"
+# Toggle kube-ps1 prompt on
 
-Usage: kubeon [-g | --global] [-h | --help]
+# Usage: kubeon [-g | --global] [-h | --help]
 
-With no arguments, turn off kube-ps1 status for this shell instance (default).
+# With no arguments, turn off kube-ps1 status for this shell instance (default).
 
-  -g --global  turn on kube-ps1 status globally
-  -h --help    print this message
-EOF
-}
+#   -g --global  turn on kube-ps1 status globally
+#   -h --help    print this message
+# EOF
+# }
 
-_kubeoff_usage() {
-  cat <<"EOF"
-Toggle kube-ps1 prompt off
+# _kubeoff_usage() {
+#   cat <<"EOF"
+# Toggle kube-ps1 prompt off
 
-Usage: kubeoff [-g | --global] [-h | --help]
+# Usage: kubeoff [-g | --global] [-h | --help]
 
-With no arguments, turn off kube-ps1 status for this shell instance (default).
+# With no arguments, turn off kube-ps1 status for this shell instance (default).
 
-  -g --global turn off kube-ps1 status globally
-  -h --help   print this message
-EOF
-}
+#   -g --global turn off kube-ps1 status globally
+#   -h --help   print this message
+# EOF
+# }
 
 kubeon() {
   if [[ "${1}" == '-h' || "${1}" == '--help' ]]; then
@@ -329,8 +322,8 @@ kubeoff() {
 
 # Build our prompt
 kube_ps1() {
-  [[ "${KUBE_PS1_ENABLED}" == "off" ]] && return
-  [[ -z "${KUBE_PS1_CONTEXT}" ]] && [[ "${KUBE_PS1_CONTEXT_ENABLE}" == true ]] && return
+
+  [[ -z "${KUBE_PS1_CONTEXT}" ]] && return
 
   local KUBE_PS1
   local KUBE_PS1_RESET_COLOR="${_KUBE_PS1_OPEN_ESC}${_KUBE_PS1_DEFAULT_FG}${_KUBE_PS1_CLOSE_ESC}"
@@ -349,13 +342,11 @@ kube_ps1() {
   fi
 
   # Context
-  if [[ "${KUBE_PS1_CONTEXT_ENABLE}" == true ]]; then
-    KUBE_PS1+="$(_kube_ps1_color_fg $KUBE_PS1_CTX_COLOR)${KUBE_PS1_CONTEXT}${KUBE_PS1_RESET_COLOR}"
-  fi
+  KUBE_PS1+="$(_kube_ps1_color_fg $KUBE_PS1_CTX_COLOR)${KUBE_PS1_CONTEXT}${KUBE_PS1_RESET_COLOR}"
 
   # Namespace
   if [[ "${KUBE_PS1_NS_ENABLE}" == true ]]; then
-    if [[ -n "${KUBE_PS1_DIVIDER}" ]] && [[ "${KUBE_PS1_CONTEXT_ENABLE}" == true ]]; then
+    if [[ -n "${KUBE_PS1_DIVIDER}" ]]; then
       KUBE_PS1+="${KUBE_PS1_DIVIDER}"
     fi
     KUBE_PS1+="$(_kube_ps1_color_fg ${KUBE_PS1_NS_COLOR})${KUBE_PS1_NAMESPACE}${KUBE_PS1_RESET_COLOR}"
